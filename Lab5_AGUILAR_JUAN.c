@@ -53,10 +53,12 @@ volatile char prev_input_cmd[4] = "NA_";
 
 // adc
 uint32_t ADC0Val[8], Int_status;
-uint32_t ADCAvVal;
-float volts;
-float distance;
-volatile bool adc_active = false;
+volatile uint32_t ADCAvVal;
+volatile uint32_t ADCAvVal2;
+
+
+volatile float volts1, distance1;
+volatile float volts2, distance2;
 
 // pwm
 #define PWM_FREQUENCY 5000
@@ -163,25 +165,25 @@ UART1IntHandler(void)
 //
 //*****************************************************************************
 
-ADCSeq0IntHandler(void){
+void ADCSeq3IntHandler(void){
 
 	// clear flag
 	ADCIntClear(ADC0_BASE, 3);
 
 	ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
 
-	volts = ADCAvVal * (3.3/4096.0);
+	volts1 = ADCAvVal * (3.3/4096.0);
 
-	distance = 5.0685 * pow(volts, 2) - 23.329 * volts + 31.152;
+	distance1 = 5.0685 * pow(volts1, 2) - 23.329 * volts1 + 31.152;
 
 
 	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
 
-	if (distance < 8) {
+	if (distance1 < 8) {
 		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
 	}
 
-	else if (distance < 10) {
+	else if (distance1 < 10) {
 		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_3, GPIO_PIN_1 | GPIO_PIN_3);
 	}
 
@@ -191,6 +193,36 @@ ADCSeq0IntHandler(void){
 
 	// re-enable ADC interrupt for next conversion
 	ADCIntEnable(ADC0_BASE, 3);
+
+}
+
+void ADCSeq2IntHandler(void){
+
+	// clear flag
+	ADCIntClear(ADC0_BASE, 2);
+
+	ADCSequenceDataGet(ADC0_BASE, 2, &ADCAvVal2);
+
+	volts2 = ADCAvVal2 * (3.3/4096.0);
+
+	distance2 = 5.0685 * pow(volts2, 2) - 23.329 * volts2 + 31.152;
+
+	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
+
+	if (distance2 < 8) {
+		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
+	}
+
+	else if (distance2 < 10) {
+		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_3, GPIO_PIN_1 | GPIO_PIN_3);
+	}
+
+	else {
+		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
+	}
+
+	// re-enable ADC interrupt for next conversion
+	ADCIntEnable(ADC0_BASE, 2);
 
 }
 
@@ -204,33 +236,45 @@ ADCSeq0IntHandler(void){
 void ADC_init(void){
 
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)){};
+	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0));
 
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)){};
+	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE));
 
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){};
+	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF));
 
 	GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
+	//-----Sensor1-----
 	// PE2 as an analog input pin
 	GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_2);
 	ADCSequenceDisable(ADC0_BASE, 3);
 
 	// ADC0 sequence 3 triggered by processor
 	ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
-
 	ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH1);
 	ADCSequenceEnable(ADC0_BASE, 3);
+	// register interrupt handler for ADC0 sequence 3
+	ADCIntRegister(ADC0_BASE, 3, &ADCSeq3IntHandler);
 	ADCIntEnable(ADC0_BASE, 3);
 
+
+	//-----Sensor2-----
+	// PE1 as an analog input pin
+	GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_1);
+	ADCSequenceDisable(ADC0_BASE, 2);
+
+	// ADC0 sequence 3 triggered by processor
+	ADCSequenceConfigure(ADC0_BASE, 2, ADC_TRIGGER_PROCESSOR, 0);
+	ADCSequenceStepConfigure(ADC0_BASE, 2, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH2);
+	ADCSequenceEnable(ADC0_BASE, 2);
 	// register interrupt handler for ADC0 sequence 3
-	ADCIntRegister(ADC0_BASE, 3, &ADCSeq0IntHandler);
+	ADCIntRegister(ADC0_BASE, 2, &ADCSeq2IntHandler);
+	ADCIntEnable(ADC0_BASE, 2);
 
 
 }
-
 
 
 //*****************************************************************************
@@ -345,8 +389,9 @@ void clear(){
 }
 
 void adc_func(){
-	// toggle ADC mode on/off
-	adc_active = !adc_active;
+	ADCProcessorTrigger(ADC0_BASE, 3); // trigger ADC conversion
+	ADCProcessorTrigger(ADC0_BASE, 2);
+	SysCtlDelay(SysCtlClockGet() / 100); // small delay to prevent flooding
 }
 
 void execute_command(char *cmd){
@@ -389,44 +434,31 @@ void PWM_init(void){
 
 	SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
 
+	// pins for wheels
 	GPIOPinConfigure(GPIO_PB6_M0PWM0);
-
-	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6);
-
-	ui32PWMClock = SysCtlClockGet() / 64;
-	ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
-
-	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, ui32Load);
-	PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN);
-	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * dutyCycle) / 100);
-
-	PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
-	PWMGenEnable(PWM0_BASE, PWM_GEN_0);
-
-}
-
-void PWM_init2(void){
-
-
-	SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
-	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-
-	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0));
-	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB));
-
-	SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
-
 	GPIOPinConfigure(GPIO_PB4_M0PWM2);
 
+	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6);
 	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4);
 
 	ui32PWMClock = SysCtlClockGet() / 64;
 	ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
 
+	// wheel one
+	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, ui32Load);
+	PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN);
+	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * dutyCycle) / 100);
+
+	// wheel two
 	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, ui32Load);
 	PWMGenConfigure(PWM0_BASE, PWM_GEN_1, PWM_GEN_MODE_DOWN);
 	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * dutyCycle) / 100);
 
+	// wheel one
+	PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
+	PWMGenEnable(PWM0_BASE, PWM_GEN_0);
+
+	// wheel two
 	PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
 	PWMGenEnable(PWM0_BASE, PWM_GEN_1);
 
@@ -529,8 +561,6 @@ int
 
     // PWM Enable
     PWM_init();
-    PWM_init2();
-    BrightnessLevel();
 
     // ADC Enable
     ADC_init();
@@ -546,10 +576,6 @@ int
     //
     while(1)
     {
-    	if (adc_active) {
-    		ADCProcessorTrigger(ADC0_BASE, 3); // trigger ADC conversion
-    		SysCtlDelay(SysCtlClockGet() / 100); // small delay to prevent flooding
-    	}
 
     	if (command_received){
     		execute_command((char *)input_cmd);
