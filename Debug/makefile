@@ -122,33 +122,33 @@ endif
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXE_OUTPUTS += \
-LAB5.out \
+Robot_Proj.out \
 
 EXE_OUTPUTS__QUOTED += \
-"LAB5.out" \
+"Robot_Proj.out" \
 
 BIN_OUTPUTS += \
-LAB5.bin \
+Robot_Proj.bin \
 
 BIN_OUTPUTS__QUOTED += \
-"LAB5.bin" \
+"Robot_Proj.bin" \
 
 
 # All Target
-all: LAB5.out
+all: Robot_Proj.out
 
 # Tool invocations
-LAB5.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
+Robot_Proj.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: ARM Linker'
-	"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 --abi=eabi -me -O2 --advice:power=all -g --gcc --define=ccs="ccs" --define=PART_TM4C123GH6PM --define=TARGET_IS_TM4C123_RB1 --diag_warning=225 --diag_wrap=off --display_error_number --gen_func_subsections=on --ual -z -m"blinky_ccs.map" --stack_size=512 --heap_size=0 -i"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/lib" -i"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="LAB5_linkInfo.xml" --rom_model -o "LAB5.out" $(ORDERED_OBJS)
+	"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 --abi=eabi -me -O2 --advice:power=all -g --gcc --define=ccs="ccs" --define=PART_TM4C123GH6PM --define=TARGET_IS_TM4C123_RB1 --diag_warning=225 --diag_wrap=off --display_error_number --gen_func_subsections=on --ual -z -m"blinky_ccs.map" --stack_size=512 --heap_size=0 -i"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/lib" -i"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="Robot_Proj_linkInfo.xml" --rom_model -o "Robot_Proj.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 	@$(MAKE) --no-print-directory post-build
 
-LAB5.bin: $(EXE_OUTPUTS)
+Robot_Proj.bin: $(EXE_OUTPUTS)
 	@echo 'Invoking: ARM Hex Utility'
-	"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armhex"  -o "LAB5.bin" $(EXE_OUTPUTS__QUOTED)
+	"C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armhex"  -o "Robot_Proj.bin" $(EXE_OUTPUTS__QUOTED)
 	@echo 'Finished building: $@'
 	@echo ' '
 	@$(MAKE) --no-print-directory post-build
@@ -162,7 +162,7 @@ clean:
 	-@echo ' '
 
 post-build:
-	-"C:/ti/ccsv6/utils/tiobj2bin/tiobj2bin" "LAB5.out" "LAB5.bin" "C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armofd" "C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armhex" "C:/ti/ccsv6/utils/tiobj2bin/mkhex4bin"
+	-"C:/ti/ccsv6/utils/tiobj2bin/tiobj2bin" "Robot_Proj.out" "Robot_Proj.bin" "C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armofd" "C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/bin/armhex" "C:/ti/ccsv6/utils/tiobj2bin/mkhex4bin"
 	-@echo ' '
 
 .PHONY: all clean dependents

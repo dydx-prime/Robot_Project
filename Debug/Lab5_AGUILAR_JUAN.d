@@ -25,6 +25,7 @@ Lab5_AGUILAR_JUAN.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/uart.h
 Lab5_AGUILAR_JUAN.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h
 Lab5_AGUILAR_JUAN.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/pwm.h
 Lab5_AGUILAR_JUAN.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/adc.h
+Lab5_AGUILAR_JUAN.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/timer.h
 
 ../Lab5_AGUILAR_JUAN.c: 
 C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/stdint.h: 
@@ -51,3 +52,4 @@ C:/ti/tivaware_c_series_2_1_4_178/driverlib/uart.h:
 C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h: 
 C:/ti/tivaware_c_series_2_1_4_178/driverlib/pwm.h: 
 C:/ti/tivaware_c_series_2_1_4_178/driverlib/adc.h: 
+C:/ti/tivaware_c_series_2_1_4_178/driverlib/timer.h: 
