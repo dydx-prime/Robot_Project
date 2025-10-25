@@ -4,30 +4,30 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CMD_SRCS += \
-../Lab5_AGUILAR_JUAN_ccs.cmd 
+../test.cmd 
 
 C_SRCS += \
-../Lab5_AGUILAR_JUAN.c \
+../main.c \
 ../startup_ccs.c 
 
 OBJS += \
-./Lab5_AGUILAR_JUAN.obj \
+./main.obj \
 ./startup_ccs.obj 
 
 C_DEPS += \
-./Lab5_AGUILAR_JUAN.d \
+./main.d \
 ./startup_ccs.d 
 
 C_DEPS__QUOTED += \
-"Lab5_AGUILAR_JUAN.d" \
+"main.d" \
 "startup_ccs.d" 
 
 OBJS__QUOTED += \
-"Lab5_AGUILAR_JUAN.obj" \
+"main.obj" \
 "startup_ccs.obj" 
 
 C_SRCS__QUOTED += \
-"../Lab5_AGUILAR_JUAN.c" \
+"../main.c" \
 "../startup_ccs.c" 
 
 

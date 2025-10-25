@@ -1,1 +1,1 @@
-"./Lab5_AGUILAR_JUAN.obj" "./startup_ccs.obj" "../Lab5_AGUILAR_JUAN_ccs.cmd" -llibc.a -l"C:/ti/tivaware_c_series_2_1_4_178/driverlib/ccs/Debug/driverlib.lib" 
+"./main.obj" "./startup_ccs.obj" "../test.cmd" -llibc.a -l"C:/ti/tivaware_c_series_2_1_4_178/driverlib/ccs/Debug/driverlib.lib" 
