@@ -22,7 +22,7 @@
 // This is part of revision 2.1.3.156 of the EK-TM4C123GXL Firmware Package.
 //
 //*****************************************************************************
-
+// what
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
@@ -68,11 +68,12 @@ uint32_t ui32Load;
 volatile uint32_t dutyCycle = 50;
 
 // pid
-volatile float target_distance = 10.0;  // target distance in cm
-volatile float error = 0.0, prev_error = 0.0, integral = 0.0;
-volatile float Kp = 2.0, Ki = 0.3, Kd = 0.8;
+volatile float target_distance = 15.0;  // target distance in cm
+volatile float curr_error = 0.0, prev_error = 0.0, sum_error = 0.0;
+volatile float Kp = 5, Ki = 20, Kd = 5;
+volatile float proportional = 0.0, integral = 0.0, derivative = 0.0, adjustment = 0.0;
 
-volatile int baseDuty = 80;   // base forward speed (%)
+volatile int baseDuty = 50;   // base forward speed (%)
 volatile float pid_output = 0.0;
 
 #define TIMER_PERIOD_MS 50
@@ -229,34 +230,48 @@ void ADCSeq3IntHandler(void)
     ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
 
     volts1 = ADCAvVal * (3.3 / 4096.0);
-    distance1 = 5.0685 * pow(volts1, 2) - 23.329 * volts1 + 31.152;
+    volts2 = volts1 * volts1;
+    distance1 = 5.0685 * volts2 - 23.329 * volts1 + 31.152;
 
     // --- LED Logic ---
     GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-    float diff = fabs(target_distance - distance1);
-    if (diff <= 1.0)
+    //float diff = fabs(target_distance - distance1);
+    if (distance1 >= 15)
         GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);   // GREEN
-    else if (diff <= 2.0)
+    else if (distance1 < 15 && distance1 > 5)
         GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PIN_2);   // BLUE/YELLOW-ish
     else
         GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);   // RED
 
     // --- PID Controller ---
+    /*
     error = target_distance - distance1;
     integral += error * 0.05;  // 50 ms period = 0.05 s
     float derivative = (error - prev_error) / 0.05;
     pid_output = Kp * error + Ki * integral + Kd * derivative;
     prev_error = error;
+    */
+    prev_error = curr_error;
+    curr_error = target_distance - distance1;
+    sum_error += curr_error;
+
+    proportional = Kp * curr_error;
+    derivative = Kd * (curr_error - prev_error);
+    integral = Ki * sum_error;
+
+
+
+    adjustment = proportional + integral + derivative;
 
     // --- Adjust Motor Duty Cycles ---
-    int rightDuty = baseDuty - pid_output;
-    int leftDuty  = baseDuty + pid_output;
+    int rightDuty = baseDuty + adjustment;
+    int leftDuty  = baseDuty - adjustment;
 
     // Clamp duty cycles
-    if (rightDuty > 100) rightDuty = 100;
-    if (rightDuty < 10)  rightDuty = 10;
-    if (leftDuty  > 100) leftDuty = 100;
-    if (leftDuty  < 10)  leftDuty = 10;
+    if (rightDuty > 90) rightDuty = 90;
+    if (rightDuty < 10)  rightDuty = 40;
+    if (leftDuty  > 90) leftDuty = 90;
+    if (leftDuty  < 10)  leftDuty = 40;
 
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
@@ -276,19 +291,8 @@ void ADCSeq2IntHandler(void){
 
 	distance2 = 5.0685 * pow(volts2, 2) - 23.329 * volts2 + 31.152;
 
-	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
+//	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
 
-	if (distance2 < 8) {
-		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
-	}
-
-	else if (distance2 < 10) {
-		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_3, GPIO_PIN_1 | GPIO_PIN_3);
-	}
-
-	else {
-		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
-	}
 
 	// re-enable ADC interrupt for next conversion
 	ADCIntEnable(ADC0_BASE, 2);
@@ -480,6 +484,7 @@ void Timer0A_init(void)
 }
 
 void start(){
+	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
     Timer0A_init();
     TimerEnable(TIMER0_BASE, TIMER_A);
 }
@@ -660,7 +665,7 @@ int main(void){
 //    while(1){
 //        // disable PWM outputs while sampling to reduce noise
 //
-//        ADCProcessorTrigger(ADC0_BASE, 3); // trigger ADC conversion
+       // ADCProcessorTrigger(ADC0_BASE, 3); // trigger ADC conversion
 //        ADCProcessorTrigger(ADC0_BASE, 2);
 //
 //    }
