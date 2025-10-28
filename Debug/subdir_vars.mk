@@ -4,7 +4,7 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CMD_SRCS += \
-../test.cmd 
+../tivaC.cmd 
 
 C_SRCS += \
 ../main.c \

@@ -1,6 +1,7 @@
 # FIXED
 
 main.obj: ../main.c
+main.obj: ../LUT.h
 main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/stdint.h
 main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/stdbool.h
 main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/yvals.h
@@ -26,8 +27,17 @@ main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h
 main.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/pwm.h
 main.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/adc.h
 main.obj: C:/ti/tivaware_c_series_2_1_4_178/driverlib/timer.h
+main.obj: ../interrupts.h
+main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/math.h
+main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h
+main.obj: ../component_testing.h
+main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/math.h
+main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h
+main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/math.h
+main.obj: C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h
 
 ../main.c: 
+../LUT.h: 
 C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/stdint.h: 
 C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/stdbool.h: 
 C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/yvals.h: 
@@ -53,3 +63,11 @@ C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h:
 C:/ti/tivaware_c_series_2_1_4_178/driverlib/pwm.h: 
 C:/ti/tivaware_c_series_2_1_4_178/driverlib/adc.h: 
 C:/ti/tivaware_c_series_2_1_4_178/driverlib/timer.h: 
+../interrupts.h: 
+C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/math.h: 
+C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h: 
+../component_testing.h: 
+C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/math.h: 
+C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h: 
+C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/math.h: 
+C:/ti/ccsv6/tools/compiler/ti-cgt-arm_5.2.9/include/string.h: 

@@ -23,6 +23,9 @@
 //
 //*****************************************************************************
 // what
+#include "LUT.h"
+#include "interrupts.h"
+#include "component_testing.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
@@ -38,44 +41,10 @@
 #include "driverlib/uart.h"
 #include "string.h"
 #include "driverlib/pwm.h"
-#include "driverlib/fpu.h"
 #include "driverlib/adc.h"
 #include "driverlib/timer.h"
 
-// global variables
-uint8_t pins[] = {GPIO_PIN_3, GPIO_PIN_2, GPIO_PIN_1}; // FP1 = RED, PF2 = BLUE, PF3 = GREEN
-int led_count = 1;
-
-// command variables
-volatile bool command_received = false;
-volatile int command_char_count = 0;
-volatile char input_cmd[4];
-volatile char prev_input_cmd[4] = "NA_";
-
-// adc
-uint32_t ADC0Val[8], Int_status;
-volatile uint32_t ADCAvVal;
-volatile uint32_t ADCAvVal2;
-
-
-volatile float volts1, distance1;
-volatile float volts2, distance2;
-
-// pwm
-#define PWM_FREQUENCY 5000
-uint32_t ui32PWMClock;
-uint32_t ui32Load;
-volatile uint32_t dutyCycle = 50;
-
-// pid
-volatile float target_distance = 15.0;  // target distance in cm
-volatile float curr_error = 0.0, prev_error = 0.0, sum_error = 0.0;
-volatile float Kp = 5, Ki = 20, Kd = 5;
-volatile float proportional = 0.0, integral = 0.0, derivative = 0.0, adjustment = 0.0;
-
-volatile int baseDuty = 50;   // base forward speed (%)
-volatile float pid_output = 0.0;
-
+// timer
 #define TIMER_PERIOD_MS 50
 
 //*****************************************************************************
@@ -104,199 +73,22 @@ __error__(char *pcFilename, uint32_t ui32Line)
 
 //*****************************************************************************
 //
-// The UART interrupt handler.
+// Timer initialization function
 //
 //*****************************************************************************
-void
-UART0IntHandler(void)
+
+void Timer0A_init(void)
 {
-    uint32_t ui32Status;
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER0));
 
-    // get and clear interrupt status
-    ui32Status = ROM_UARTIntStatus(UART0_BASE, true);
-    ROM_UARTIntClear(UART0_BASE, ui32Status);
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    uint32_t ui32Period = (SysCtlClockGet() / 1000) * TIMER_PERIOD_MS;
+    TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
 
-    while (ROM_UARTCharsAvail(UART0_BASE))
-    {
-    	char c = ROM_UARTCharGetNonBlocking(UART0_BASE);
-
-        // send to UART1
-        ROM_UARTCharPutNonBlocking(UART1_BASE, c);
-
-        // echo to UART0
-        ROM_UARTCharPutNonBlocking(UART0_BASE, c);
-    }
-}
-
-
-void
-UART1IntHandler(void)
-{
-    uint32_t ui32Status;
-
-    // get and clear interrupt status
-    ui32Status = ROM_UARTIntStatus(UART1_BASE, true);
-    ROM_UARTIntClear(UART1_BASE, ui32Status);
-
-    while(ROM_UARTCharsAvail(UART1_BASE))
-    {
-
-        char c = ROM_UARTCharGetNonBlocking(UART1_BASE);
-
-        // send to UART0
-        ROM_UARTCharPutNonBlocking(UART0_BASE, c);
-
-        // echo to UART1
-        ROM_UARTCharPutNonBlocking(UART1_BASE, c);
-
-        //turn on current LED, turn off the others
-        GPIOPinWrite(GPIO_PORTF_BASE, pins[led_count], pins[led_count]);
-        GPIOPinWrite(GPIO_PORTF_BASE, pins[(led_count+1)%3], 0);
-        GPIOPinWrite(GPIO_PORTF_BASE, pins[(led_count+2)%3], 0);
-
-        // Advance the counter
-        led_count = (led_count + 1) % 3;
-
-
-        input_cmd[command_char_count] = c;
-
-        command_char_count++;
-
-        if (command_char_count == 3){
-        	input_cmd[3] = '\0';
-        	command_received = true;
-        }
-    }
-}
-
-
-//*****************************************************************************
-//
-// Timer0A Interrupt Handler
-//
-//*****************************************************************************
-
-void Timer0AIntHandler(void)
-{
-    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-
-    // Trigger the right-side distance sensor measurement every 50 ms
-    ADCProcessorTrigger(ADC0_BASE, 3);
-}
-
-
-//*****************************************************************************
-//
-// ADC interrupt handler.
-//
-//*****************************************************************************
-
-// right sensor
-//void ADCSeq3IntHandler(void){
-//
-//	// clear flag
-//	ADCIntClear(ADC0_BASE, 3);
-//
-//	ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
-//
-//	volts1 = ADCAvVal * (3.3/4096.0);
-//
-//	distance1 = 5.0685 * pow(volts1, 2) - 23.329 * volts1 + 31.152;
-//
-//
-//	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-//
-//	if (distance1 < 8) {
-//		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
-//	}
-//
-//	else if (distance1 < 10) {
-//		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_3, GPIO_PIN_1 | GPIO_PIN_3);
-//	}
-//
-//	else {
-//		GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
-//	}
-//
-//	// re-enable ADC interrupt for next conversion
-//	ADCIntEnable(ADC0_BASE, 3);
-//
-//}
-
-void ADCSeq3IntHandler(void)
-{
-    // Clear flag
-    ADCIntClear(ADC0_BASE, 3);
-    ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
-
-    volts1 = ADCAvVal * (3.3 / 4096.0);
-    volts2 = volts1 * volts1;
-    distance1 = 5.0685 * volts2 - 23.329 * volts1 + 31.152;
-
-    // --- LED Logic ---
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-    //float diff = fabs(target_distance - distance1);
-    if (distance1 >= 15)
-        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);   // GREEN
-    else if (distance1 < 15 && distance1 > 5)
-        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PIN_2);   // BLUE/YELLOW-ish
-    else
-        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);   // RED
-
-    // --- PID Controller ---
-    /*
-    error = target_distance - distance1;
-    integral += error * 0.05;  // 50 ms period = 0.05 s
-    float derivative = (error - prev_error) / 0.05;
-    pid_output = Kp * error + Ki * integral + Kd * derivative;
-    prev_error = error;
-    */
-    prev_error = curr_error;
-    curr_error = target_distance - distance1;
-    sum_error += curr_error;
-
-    proportional = Kp * curr_error;
-    derivative = Kd * (curr_error - prev_error);
-    integral = Ki * sum_error;
-
-
-
-    adjustment = proportional + integral + derivative;
-
-    // --- Adjust Motor Duty Cycles ---
-    int rightDuty = baseDuty + adjustment;
-    int leftDuty  = baseDuty - adjustment;
-
-    // Clamp duty cycles
-    if (rightDuty > 90) rightDuty = 90;
-    if (rightDuty < 10)  rightDuty = 40;
-    if (leftDuty  > 90) leftDuty = 90;
-    if (leftDuty  < 10)  leftDuty = 40;
-
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
-
-    ADCIntEnable(ADC0_BASE, 3); // re-enable ADC interrupt
-}
-
-// front sensor
-void ADCSeq2IntHandler(void){
-
-	// clear flag
-	ADCIntClear(ADC0_BASE, 2);
-
-	ADCSequenceDataGet(ADC0_BASE, 2, &ADCAvVal2);
-
-	volts2 = ADCAvVal2 * (3.3/4096.0);
-
-	distance2 = 5.0685 * pow(volts2, 2) - 23.329 * volts2 + 31.152;
-
-//	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-
-
-	// re-enable ADC interrupt for next conversion
-	ADCIntEnable(ADC0_BASE, 2);
-
+    TimerIntRegister(TIMER0_BASE, TIMER_A, Timer0AIntHandler);
+    IntEnable(INT_TIMER0A);
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 }
 
 //*****************************************************************************
@@ -304,7 +96,6 @@ void ADCSeq2IntHandler(void){
 // ADC initialization function
 //
 //*****************************************************************************
-
 
 void ADC_init(void){
 
@@ -349,12 +140,12 @@ void ADC_init(void){
 
 }
 
-
 //*****************************************************************************
 //
 // Send a string to the UART.
 //
 //*****************************************************************************
+
 void
 UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
 {
@@ -389,129 +180,6 @@ UARTSend1(const uint8_t *pui8Buffer, uint32_t ui32Count)
     }
 }
 
-
-//*****************************************************************************
-//
-// LookUp Table & CMD Logic
-//
-//*****************************************************************************
-void forward(void);
-void scan(void);
-void stop(void);
-void left(void);
-void right(void);
-void backward(void);
-void clear(void);
-void BrightnessLevel(void);
-void adc_func(void);
-void start(void);
-
-typedef void (*Fn)(void);
-typedef struct {
-	char cmd[4]; // command + '/0'
-	Fn cmd_funct; // pointer to command function
-}lookup;
-
-lookup lookup_table[] = {
-	{"STR", start},
-    {"FWD", forward},
-    {"SCN", scan},
-    {"STP", stop},
-    {"LFT", left},
-    {"RGT", right},
-    {"BAC", backward},
-	{"CLC", clear},
-	{"LED", BrightnessLevel},
-    {"ADC", adc_func}
-};
-
-int table_entries = sizeof(lookup_table) / sizeof(lookup_table[0]);
-
-// function calls based on lookup_table
-void forward() {
-	char terminal_string[] = "\n\rMoving Forward!\r\n";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void scan() {
-	char terminal_string[] = "\n\rScanning!\r\n";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void stop() {
-	char terminal_string[] = "\n\rStopping!\r\n";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void left() {
-	char terminal_string[] = "\n\rMoving Left!\r\n";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void right() {
-	char terminal_string[] = "\n\rMoving Right!\r\n";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void backward() {
-	char terminal_string[] = "\n\rMoving Backwards!\r\n";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void clear(){
-    char terminal_string[] = "\r\033[2J";
-    UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-}
-
-void adc_func(){
-	ADCProcessorTrigger(ADC0_BASE, 3); // trigger ADC conversion
-//	ADCProcessorTrigger(ADC0_BASE, 2);
-	SysCtlDelay(SysCtlClockGet() / 100); // small delay to prevent flooding
-}
-
-void Timer0A_init(void)
-{
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
-    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER0));
-
-    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-    uint32_t ui32Period = (SysCtlClockGet() / 1000) * TIMER_PERIOD_MS;
-    TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
-
-    TimerIntRegister(TIMER0_BASE, TIMER_A, Timer0AIntHandler);
-    IntEnable(INT_TIMER0A);
-    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-}
-
-void start(){
-	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-    Timer0A_init();
-    TimerEnable(TIMER0_BASE, TIMER_A);
-}
-
-void execute_command(char *cmd){
-	if(strcmp(cmd, prev_input_cmd) == 0){
-		char terminal_string[] = "\n\rCommand cannot be used again!\r\n";
-		UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-		return;
-	}
-
-	int i; // like, whyy?
-	for(i = 0; i < table_entries; i++){
-        if (strcmp(cmd, lookup_table[i].cmd) == 0) {
-            lookup_table[i].cmd_funct(); // run the matched function
-
-            for(i = 0; i < 4; i++){
-            	prev_input_cmd[i] = cmd[i];
-            }
-            return;
-        }
-	}
-	char terminal_string[] = "\n\rCommand does not exist!\r\n";
-	UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
-
-}
-
 //*****************************************************************************
 //
 // PWM_init
@@ -520,12 +188,13 @@ void execute_command(char *cmd){
 
 void PWM_init(void){
 
-
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
 	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0));
 	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB));
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA));
 
 	SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
 
@@ -536,24 +205,26 @@ void PWM_init(void){
 	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6);
 	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4);
 
+	// phase pins - default directions: forward (HIGH)
+//    GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_2 ); // right phase
+//    GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_3 ); // left phase
+//    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_2 , GPIO_PIN_2 );
+//    GPIOPinWrite(GPIO_PORTA_BASE,  GPIO_PIN_3 ,  GPIO_PIN_3 );
+
 	ui32PWMClock = SysCtlClockGet() / 64;
 	ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
 
 	// right wheel
 	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, ui32Load);
 	PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN);
-	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * 10) / 100);
-
-	// left wheel
-	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, ui32Load);
-	PWMGenConfigure(PWM0_BASE, PWM_GEN_1, PWM_GEN_MODE_DOWN);
-	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * 10) / 100);
-
-	// right wheel
+	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * 10) / 100); // duty cycle is 10
 	PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
 	PWMGenEnable(PWM0_BASE, PWM_GEN_0);
 
 	// left wheel
+	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, ui32Load);
+	PWMGenConfigure(PWM0_BASE, PWM_GEN_1, PWM_GEN_MODE_DOWN);
+	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * 10) / 100); // duty cycle is 10
 	PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
 	PWMGenEnable(PWM0_BASE, PWM_GEN_1);
 
@@ -561,73 +232,42 @@ void PWM_init(void){
 
 //*****************************************************************************
 //
-// PWM Brightness Level Function
+// main
 //
 //*****************************************************************************
 
-void BrightnessLevel(){
-//
-//	int brightness = 1;
-//	dutyCycle = 50;
-//
-//	while(1){
-//
-//		dutyCycle += brightness;
-//
-//		if(dutyCycle >= 100){
-//			dutyCycle = 90;
-//			brightness = -1;
-//		}
-//		else if(dutyCycle <= 0){
-//			dutyCycle = 10;
-//			brightness = 1;
-//		}
-//
-//		PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * dutyCycle) / 100);
-//		PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * dutyCycle) / 100);
-//		SysCtlDelay(SysCtlClockGet() / 200);
-//	}
-}
-
-
 int main(void){
-    //
+
     // Enable lazy stacking for interrupt handlers.  This allows floating-point
     // instructions to be used within interrupt handlers, but at the expense of
     // extra stack usage.
-    //
     ROM_FPUEnable();
     ROM_FPULazyStackingEnable();
-    //
+
     // Set the clocking to run directly from the crystal.
-    //
     ROM_SysCtlClockSet(SYSCTL_SYSDIV_1 | SYSCTL_USE_OSC | SYSCTL_OSC_MAIN |
                        SYSCTL_XTAL_16MHZ);
-    //
+
     // Enable the GPIO port that is used for the on-board LED.
-    //
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-    //
+
     // Enable the GPIO pins for the LED.
-    //
     ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
     // default green LED enable
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
-    //
-    // Enable UART0 and UART1
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_3);
+
+    // Enable UART0 & UART1
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-    //
+
     // Enable processor interrupts.
-    //
     ROM_IntMasterEnable();
-    //
+
     // Set GPIO A0, A1, B0, B1
-    //
     GPIOPinConfigure(GPIO_PA0_U0RX);
     GPIOPinConfigure(GPIO_PA1_U0TX);
     ROM_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
@@ -635,9 +275,8 @@ int main(void){
     GPIOPinConfigure(GPIO_PB0_U1RX);
     GPIOPinConfigure(GPIO_PB1_U1TX);
     ROM_GPIOPinTypeUART(GPIO_PORTB_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-    //
-    // UART0, 115200, 8-N-1 and UART1, 9600, 8-N-1
 
+    // UART0, 115200, 8-N-1 and UART1, 9600, 8-N-1
     ROM_UARTConfigSetExpClk(UART0_BASE, ROM_SysCtlClockGet(), 115200,
                             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
                              UART_CONFIG_PAR_NONE));
@@ -645,9 +284,8 @@ int main(void){
     ROM_UARTConfigSetExpClk(UART1_BASE, ROM_SysCtlClockGet(), 9600,
                             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
                              UART_CONFIG_PAR_NONE));
-    //
+
     // Enable the UART interrupt.
-    //
     ROM_IntEnable(INT_UART0);
     ROM_UARTIntEnable(UART0_BASE, UART_INT_RX | UART_INT_RT);
 
@@ -660,31 +298,19 @@ int main(void){
     // PWM Enable
     PWM_init();
 
-//    BrightnessLevel();
-
-//    while(1){
-//        // disable PWM outputs while sampling to reduce noise
-//
-       // ADCProcessorTrigger(ADC0_BASE, 3); // trigger ADC conversion
-//        ADCProcessorTrigger(ADC0_BASE, 2);
-//
-//    }
-
     // Prompt for text to be entered.
-    //
-    char terminal_string[] = "\033[2JPlease enter characters in the remote Bluetooth Terminal and see the color change: ";
+    char terminal_string[] = "\033[2JPlease enter characters in the remote Blue-tooth Terminal and see the color change: ";
     UARTSend((uint8_t *) terminal_string, strlen(terminal_string));
     UARTSend1((uint8_t *) terminal_string, strlen(terminal_string));
-    //
+
     // Loop forever echoing data through the UART.
-    //
     while(1)
     {
-
     	if (command_received){
     		execute_command((char *)input_cmd);
     		command_received = false;
     		command_char_count = 0;
     	}
+
     }
 }
