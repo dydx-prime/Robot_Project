@@ -4,7 +4,7 @@
    <copyright>Copyright (c) 1996-2017 Texas Instruments Incorporated</copyright>
    <link_time>0x6900601e</link_time>
    <link_errors>0x0</link_errors>
-   <output_file>Embedded_Project.out</output_file>
+   <output_file>Robot_Project.out</output_file>
    <entry_point>
       <name>_c_int00</name>
       <address>0x2385</address>
