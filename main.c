@@ -22,7 +22,7 @@
 // This is part of revision 2.1.3.156 of the EK-TM4C123GXL Firmware Package.
 //
 //*****************************************************************************
-// what
+// lab 6
 #include "LUT.h"
 #include "interrupts.h"
 #include "component_testing.h"

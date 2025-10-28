@@ -8,6 +8,6 @@
 	<isElfFormat value="true"/>
 	<rts value="libc.a"/>
 	<createSlaveProjects value=""/>
-	<origin value="C:/TivaC_workspace/Lab3_Aguilar_Juan"/>
+	<origin value="C:/TivaC_workspace/Robot_Project"/>
 	<isTargetManual value="true"/>
 </projectOptions>
