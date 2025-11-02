@@ -35,7 +35,8 @@ int led_count = 1;
 uint32_t ADC0Val[8], Int_status;
 volatile uint32_t ADCAvVal;
 volatile uint32_t ADCAvVal2;
-volatile bool front_block_flag = false;
+bool front_block_flag = false;
+bool uTurnStatus = false;
 
 volatile float volts1, right_distance; // right sensor
 volatile float volts2, front_distance; // front sensor
@@ -44,7 +45,7 @@ volatile float volts2, front_distance; // front sensor
 #define PWM_FREQUENCY 5000
 uint32_t ui32PWMClock;
 uint32_t ui32Load;
-volatile int baseDuty = 50;   // duty cycle speed (%)
+volatile int baseDuty = 50;   // duty cycle speed %
 
 // pid
 volatile float target_distance = 15.0;  // target distance in cm
@@ -120,58 +121,28 @@ UART1IntHandler(void)
     }
 }
 
-
 //*****************************************************************************
 //
-// Timer0A Interrupt Handler
+// functions used by Interrupts
 //
 //*****************************************************************************
 
-void Timer0AIntHandler(void)
-{
-    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-
-    //ADCProcessorTrigger(ADC0_BASE, 2);
+void stop_checker(void){ // a quick checker to see if the front sensor actually works
 
 	 if (front_block_flag){
-		 int rightDuty = 0;
-	 	 int leftDuty = 0;
-		 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
-		 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+		 int rightDuty = 10;
+	 	 int leftDuty = 10;
+	 	 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
+	 	 PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
 	 }
 
-    // right sensor distance measurement every 50 ms
-    ADCProcessorTrigger(ADC0_BASE, 3);
 }
 
-//*****************************************************************************
-//
-// ADC Interrupt Handler
-//
-//*****************************************************************************
+void pid_func(void){
 
-void ADCSeq3IntHandler(void) // left sensor
-{
-    // Clear flag
-    ADCIntClear(ADC0_BASE, 3);
-    ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
-
-    volts1 = ADCAvVal * (3.3 / 4096.0);
-//    volts2 = volts1 * volts1; //
-//    right_distance = 5.0685 * volts2 - 23.329 * volts1 + 31.152;
-    right_distance = 5.0685 * pow(volts1, 2) - 23.329 * volts1 + 31.152;
-
-    // --- LED Logic ---
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-
-    float diff = fabs(target_distance - right_distance);
-
-    if (diff <= 1.0f)
-        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);   // GREEN
-    else if (diff < 2.0f)
-    	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_3, GPIO_PIN_1 | GPIO_PIN_3);   // YELLOW
-    else
-        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);   // RED
+	// enable green LED
+	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_3);
 
     // --- PID ---
     prev_error = curr_error;
@@ -181,7 +152,6 @@ void ADCSeq3IntHandler(void) // left sensor
     integral_error += curr_error * .05;
     if(integral_error > 100) integral_error = 100;
     if(integral_error < -100) integral_error = -100;
-
 
     proportional = Kp * curr_error;
     derivative = Kd * (curr_error - prev_error) / .05; // d/dt
@@ -203,6 +173,77 @@ void ADCSeq3IntHandler(void) // left sensor
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
 
+}
+
+void rightTurn(void){
+
+	// enable BLUE LED
+	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_2);
+
+    int rightDuty = 25;
+    int leftDuty  = 60;
+
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+
+}
+
+void uTurn(void){
+
+	// enable RED LED
+	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_1);
+
+	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5 , 0); // right motor phase - forward
+	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , GPIO_PIN_4); // left motor phase - backwards
+
+    // experiment with duty cycles - try to get the robot to spin in place
+    int rightDuty = 40;
+    int leftDuty  = 40;
+
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+
+}
+
+//*****************************************************************************
+//
+// Timer0A Interrupt Handler
+//
+//*****************************************************************************
+
+void Timer0AIntHandler(void)
+{
+    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+
+    // front sensor handler call
+   	ADCProcessorTrigger(ADC0_BASE, 2);
+}
+
+//*****************************************************************************
+//
+// ADC Interrupt Handler
+//
+//*****************************************************************************
+
+void ADCSeq3IntHandler(void) // right sensor
+{
+    // Clear flag
+    ADCIntClear(ADC0_BASE, 3);
+
+    // distance calculation
+    ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
+    volts1 = ADCAvVal * (3.3 / 4096.0);
+    right_distance = 5.0685 * pow(volts1, 2) - 23.329 * volts1 + 31.152;
+
+    if(right_distance > 15){
+    	rightTurn();
+    }
+    else{
+        pid_func();
+    }
+
     ADCIntEnable(ADC0_BASE, 3); // re-enable ADC interrupt
 }
 
@@ -210,17 +251,35 @@ void ADCSeq2IntHandler(void){ // front sensor
 
 	// clear flag
 	ADCIntClear(ADC0_BASE, 2);
-	ADCSequenceDataGet(ADC0_BASE, 2, &ADCAvVal2);
 
+	ADCSequenceDataGet(ADC0_BASE, 2, &ADCAvVal2);
 	volts2 = ADCAvVal2 * (3.3/4096.0);
 	front_distance = 5.0685 * pow(volts2, 2) - 23.329 * volts2 + 31.152;
 
-	if (front_distance <= 3){
-		 front_block_flag = true;
+	if (front_distance <= 8){
+		// front_block_flag = true;
+		uTurnStatus = true;
+		uTurn();
 	}
-	else{
-	  	  front_block_flag = false;
+	else if (uTurnStatus && front_distance <= 14){
+	    uTurn();
 	}
+    else if (uTurnStatus){
+        uTurnStatus = false;
+
+        // set wheels forward again
+    	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5 , 0);
+    	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , 0);
+
+        int rightDuty = 50;
+        int leftDuty  = 50;
+
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+    }
+    else{
+        ADCProcessorTrigger(ADC0_BASE, 3);
+    }
 
 	// re-enable ADC interrupt for next conversion
 	ADCIntEnable(ADC0_BASE, 2);

@@ -22,7 +22,7 @@
 // This is part of revision 2.1.3.156 of the EK-TM4C123GXL Firmware Package.
 //
 //*****************************************************************************
-// lab 6
+// lab 6 - yessir
 #include "LUT.h"
 #include "interrupts.h"
 #include "component_testing.h"
@@ -190,26 +190,30 @@ void PWM_init(void){
 
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+	SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
 
 	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0));
 	while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB));
-    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA));
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE));
 
 	SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
 
-	// pins for wheels
+	// phase pins - LOW = forward, HIGH = reverse
+	GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_5 ); // right motor phase
+	GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_4 ); // left motor phase
+
+	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5 , 0);
+	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , 0);
+
+	// Note that for the phase pins above, if you set both to high, a bug is created (idk y)
+
+	// PWM pins for motors
 	GPIOPinConfigure(GPIO_PB6_M0PWM0); // right wheel
 	GPIOPinConfigure(GPIO_PB4_M0PWM2); // left wheel
 
 	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6);
 	GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_4);
 
-	// phase pins - default directions: forward (HIGH)
-//    GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_2 ); // right phase
-//    GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_3 ); // left phase
-//    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_2 , GPIO_PIN_2 );
-//    GPIOPinWrite(GPIO_PORTA_BASE,  GPIO_PIN_3 ,  GPIO_PIN_3 );
 
 	ui32PWMClock = SysCtlClockGet() / 64;
 	ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
@@ -236,7 +240,7 @@ void PWM_init(void){
 //
 //*****************************************************************************
 
-int main(void){
+	int main(void){
 
     // Enable lazy stacking for interrupt handlers.  This allows floating-point
     // instructions to be used within interrupt handlers, but at the expense of
@@ -245,7 +249,7 @@ int main(void){
     ROM_FPULazyStackingEnable();
 
     // Set the clocking to run directly from the crystal.
-    ROM_SysCtlClockSet(SYSCTL_SYSDIV_1 | SYSCTL_USE_OSC | SYSCTL_OSC_MAIN |
+    ROM_SysCtlClockSet(SYSCTL_SYSDIV_4 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN |
                        SYSCTL_XTAL_16MHZ);
 
     // Enable the GPIO port that is used for the on-board LED.
@@ -263,6 +267,7 @@ int main(void){
 
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+
 
     // Enable processor interrupts.
     ROM_IntMasterEnable();
@@ -297,6 +302,9 @@ int main(void){
 
     // PWM Enable
     PWM_init();
+
+    // Timer Enable
+    Timer0A_init(); // disable if testing rightTurn and U-turn individually
 
     // Prompt for text to be entered.
     char terminal_string[] = "\033[2JPlease enter characters in the remote Blue-tooth Terminal and see the color change: ";
