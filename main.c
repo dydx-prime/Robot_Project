@@ -221,14 +221,14 @@ void PWM_init(void){
 	// right wheel
 	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, ui32Load);
 	PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN);
-	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * 10) / 100); // duty cycle is 10
+	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * 1) / 100); // duty cycle is 1
 	PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
 	PWMGenEnable(PWM0_BASE, PWM_GEN_0);
 
 	// left wheel
 	PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, ui32Load);
 	PWMGenConfigure(PWM0_BASE, PWM_GEN_1, PWM_GEN_MODE_DOWN);
-	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * 10) / 100); // duty cycle is 10
+	PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * 1) / 100); // duty cycle is 1
 	PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
 	PWMGenEnable(PWM0_BASE, PWM_GEN_1);
 

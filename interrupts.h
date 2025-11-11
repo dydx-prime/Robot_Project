@@ -36,7 +36,7 @@ uint32_t ADC0Val[8], Int_status;
 volatile uint32_t ADCAvVal;
 volatile uint32_t ADCAvVal2;
 bool front_block_flag = false;
-bool uTurnStatus = false;
+bool uTurnStatus = false, right_turn_status;
 
 volatile float volts1, right_distance; // right sensor
 volatile float volts2, front_distance; // front sensor
@@ -45,12 +45,13 @@ volatile float volts2, front_distance; // front sensor
 #define PWM_FREQUENCY 5000
 uint32_t ui32PWMClock;
 uint32_t ui32Load;
-volatile int baseDuty = 50;   // duty cycle speed %
+volatile int baseDuty = 80;   // duty cycle speed %
 
 // pid
-volatile float target_distance = 15.0;  // target distance in cm
-volatile float curr_error = 0.0, prev_error = 0.0, integral_error = 0.0;
-volatile float Kp = 4, Ki = 3, Kd = 2;
+volatile float target_distance = 8.5, right_turn_distance = 15.0;  // target distance in cm
+volatile int right_turn_count = 0.0, uturn_count = 0.0;
+volatile float curr_error = 0.0, prev_error = 0.0, integral_error = 0.0, sum_error = 0.0;
+volatile float Kp = 0.8, Ki = 0.02, Kd = 0.08;
 volatile float proportional = 0.0, integral = 0.0, derivative = 0.0, adjustment = 0.0;
 
 
@@ -164,11 +165,13 @@ void pid_func(void){
     int leftDuty  = baseDuty - adjustment;
 
     // clamps
-    if (rightDuty > 90) rightDuty = 90;
+
+    if (rightDuty > 99) rightDuty = baseDuty;
     if (rightDuty < 10) rightDuty = 10;
 
-    if (leftDuty  > 90) leftDuty = 90;
+    if (leftDuty  > 99) leftDuty = baseDuty;
     if (leftDuty  < 10) leftDuty = 10;
+
 
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
@@ -181,8 +184,8 @@ void rightTurn(void){
 	GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
     GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_2);
 
-    int rightDuty = 25;
-    int leftDuty  = 60;
+    int rightDuty = 30;
+    int leftDuty  = 80;
 
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
@@ -199,11 +202,15 @@ void uTurn(void){
 	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , GPIO_PIN_4); // left motor phase - backwards
 
     // experiment with duty cycles - try to get the robot to spin in place
-    int rightDuty = 40;
-    int leftDuty  = 40;
+    int rightDuty = 85;
+    int leftDuty  = 85;
 
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+
+    //TimerDisable(TIMER0_BASE, TIMER_A);
+    //SysCtlDelay(40000000 / 7.0);
+    //TimerEnable(TIMER0_BASE, TIMER_A);
 
 }
 
@@ -219,6 +226,9 @@ void Timer0AIntHandler(void)
 
     // front sensor handler call
    	ADCProcessorTrigger(ADC0_BASE, 2);
+
+
+
 }
 
 //*****************************************************************************
@@ -237,10 +247,22 @@ void ADCSeq3IntHandler(void) // right sensor
     volts1 = ADCAvVal * (3.3 / 4096.0);
     right_distance = 5.0685 * pow(volts1, 2) - 23.329 * volts1 + 31.152;
 
-    if(right_distance > 15){
+    if(right_distance > right_turn_distance){
+    	right_turn_status = true;
     	rightTurn();
     }
     else{
+    	right_turn_status = false;
+
+    	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5 , 0);
+		GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , 0);
+
+		int rightDuty = baseDuty;
+		int leftDuty  = baseDuty;
+
+		PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
+		PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+
         pid_func();
     }
 
@@ -256,26 +278,33 @@ void ADCSeq2IntHandler(void){ // front sensor
 	volts2 = ADCAvVal2 * (3.3/4096.0);
 	front_distance = 5.0685 * pow(volts2, 2) - 23.329 * volts2 + 31.152;
 
-	if (front_distance <= 8){
+	if (front_distance <= 8 && !right_turn_status && uturn_count <= 0){
 		// front_block_flag = true;
+		uturn_count = 2;
 		uTurnStatus = true;
 		uTurn();
 	}
-	else if (uTurnStatus && front_distance <= 14){
+	else if (uTurnStatus && front_distance <= 14.0){
 	    uTurn();
 	}
     else if (uTurnStatus){
-        uTurnStatus = false;
 
-        // set wheels forward again
-    	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5 , 0);
-    	GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , 0);
+    	uturn_count--;
 
-        int rightDuty = 50;
-        int leftDuty  = 50;
+    	if (uturn_count <= 0)
+    	{
+    		uTurnStatus = false;
 
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+			// set wheels forward again
+			GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5 , 0);
+			GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4 , 0);
+
+			int rightDuty = baseDuty;
+			int leftDuty  = baseDuty;
+
+			PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, (ui32Load * rightDuty) / 100);
+			PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (ui32Load * leftDuty) / 100);
+    	}
     }
     else{
         ADCProcessorTrigger(ADC0_BASE, 3);
